@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [ aarch64, armv7hl, i486 ]
-        release: [ "4.5.0.24" ]
+        release: [ "4.5.0.16" ]
 
     steps:
       - name: Checkout repository
