@@ -1,35 +1,45 @@
-name: Build Sailfish OS RPMs
+name: Build Sailfish OS RPM
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
 
 jobs:
   build:
     name: Build RPM (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         arch: [ aarch64, armv7hl, i486 ]
-        release: [ 4.6.0.15 ]
+        release: [ "4.5.0.24" ]
+
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Build Sailfish RPM
-        uses: docker://sailfishos/sdk-build:latest
         with:
-          args: |
-            sfdk config target=SailfishOS-${{ matrix.release }}-${{ matrix.arch }}
-            sfdk build
-            sfdk package
+          submodules: recursive
 
-      - name: Archive RPM Artifacts
+      - name: Build RPM with Sailfish Action
+        uses: coderus/github-sfos-build@master
+        with:
+          release: ${{ matrix.release }}
+          arch: ${{ matrix.arch }}
+
+      - name: Upload RPM Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: harbour-sailfish-horizon-${{ matrix.arch }}
           path: RPMS/*.rpm
           if-no-files-found: warn
+
+      - name: Create GitHub Release and Upload RPMs (on version tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: RPMS/*.rpm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
