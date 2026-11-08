@@ -1,0 +1,35 @@
+name: Build Sailfish OS RPMs
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build RPM (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ aarch64, armv7hl, i486 ]
+        release: [ 4.6.0.15 ]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Sailfish RPM
+        uses: docker://sailfishos/sdk-build:latest
+        with:
+          args: |
+            sfdk config target=SailfishOS-${{ matrix.release }}-${{ matrix.arch }}
+            sfdk build
+            sfdk package
+
+      - name: Archive RPM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: harbour-sailfish-horizon-${{ matrix.arch }}
+          path: RPMS/*.rpm
+          if-no-files-found: warn

@@ -1,0 +1,12 @@
+[Unit]
+Description=Outlook 365 Background Sync Keep-Alive for Sailfish OS
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/harbour-sailfish-horizon --background
+Restart=on-failure
+RestartSec=30s
+
+[Install]
+WantedBy=default.target
