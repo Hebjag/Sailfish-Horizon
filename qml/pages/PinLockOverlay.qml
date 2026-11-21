@@ -11,6 +11,12 @@ Rectangle {
     property string enteredPin: ""
     property bool isError: false
 
+    // Block touch events from passing through to underlying pages when locked
+    MouseArea {
+        anchors.fill: parent
+        preventStealing: true
+    }
+
     function checkPin() {
         if (enteredPin === appWindow.configuredPin) {
             enteredPin = ""
@@ -29,7 +35,7 @@ Rectangle {
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            source: "/usr/share/icons/hicolor/86x86/apps/harbour-sailfish-horizon.png"
+            source: "/usr/share/icons/hicolor/172x172/apps/harbour-sailfish-horizon.png"
             width: Theme.iconSizeLarge
             height: Theme.iconSizeLarge
             fillMode: Image.PreserveAspectFit

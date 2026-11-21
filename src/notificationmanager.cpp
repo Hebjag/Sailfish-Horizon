@@ -22,7 +22,7 @@ uint NotificationManager::sendNotification(const QString &summary, const QString
 
     const QString appName = QStringLiteral("Outlook 365");
     const uint replacesId = 0;
-    const QString icon = QStringLiteral("/usr/share/icons/hicolor/86x86/apps/harbour-sailfish-horizon.png");
+    const QString icon = QStringLiteral("harbour-sailfish-horizon");
     const QStringList actions;
     
     QVariantMap hints;

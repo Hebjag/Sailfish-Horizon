@@ -4,12 +4,11 @@ Summary:    Dedicated Enterprise Outlook Web Client
 Version:    1.0.0
 Release:    1
 License:    GPLv3
-URL:        https://github.com/
+URL:        https://github.com/Hebjag/Sailfish-Horizon
 Source0:    %{name}-%{version}.tar.bz2
 Requires:   sailfishsilica-qt5 >= 0.10.9
 Requires:   sailfish-components-webview-qt5
 Requires:   sailfish-components-webview-qt5-popups
-Requires:   nemo-qml-plugin-notifications
 BuildRequires:  pkgconfig(sailfishapp) >= 1.0.2
 BuildRequires:  pkgconfig(Qt5Core)
 BuildRequires:  pkgconfig(Qt5Qml)

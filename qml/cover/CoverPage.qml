@@ -16,7 +16,7 @@ CoverBackground {
 
             Image {
                 anchors.fill: parent
-                source: "/usr/share/icons/hicolor/86x86/apps/harbour-sailfish-horizon.png"
+                source: "/usr/share/icons/hicolor/172x172/apps/harbour-sailfish-horizon.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: 0.95
             }

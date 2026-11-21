@@ -1,0 +1,30 @@
+# Qt Creator & Build outputs
+*.user
+*.user.*
+Makefile*
+*.o
+*.obj
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+*.qmlc
+*.jsc
+.qmake.stash
+
+# Binaries & Packaging
+/harbour-sailfish-horizon
+RPMS/
+SRPMS/
+*.rpm
+*.tar.bz2
+*.tar.gz
+
+# Shadow build directories
+*-build-*
+build-*
+
+# OS & Editor temp files
+.DS_Store
+Thumbs.db
+*.swp
+*~

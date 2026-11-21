@@ -4,8 +4,8 @@ X-Nemo-Application-Type=silica-qt5
 Name=Outlook
 Comment=Dedicated Enterprise Outlook Web Client
 Icon=harbour-sailfish-horizon
-Exec=harbour-sailfish-horizon %u
+Exec=harbour-sailfish-horizon %U
 MimeType=x-scheme-handler/mailto;
 Categories=Network;Email;Office;
-[X-Application]
+[X-Sailfish-Application]
 Permissions=Internet;UserDirs;

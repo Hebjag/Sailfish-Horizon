@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
     view->setSource(SailfishApp::pathToMainQml());
 
     if (!backgroundMode) {
-        view->show();
+        view->showFullScreen();
     }
 
     return app->exec();

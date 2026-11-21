@@ -19,9 +19,15 @@ ApplicationWindow {
     property bool isLocked: false
     property string configuredPin: appSettings.pinCode
 
+    // Centralized persistent application settings (single source of truth)
     Settings {
         id: appSettings
         category: "HorizonOutlook"
+        property string customRealm: ""
+        property int zoomFactor: 100
+        property bool forceDesktop: false
+        property string startModule: "mail"
+        property bool autoThemeSync: true
         property bool pinLockEnabled: false
         property string pinCode: ""
         property int lockTimeoutMinutes: 5

@@ -1,4 +1,5 @@
 import QtQuick 2.0
+import QtQuick.Window 2.2
 import Sailfish.Silica 1.0
 import Qt.labs.settings 1.0
 
@@ -6,24 +7,15 @@ Page {
     id: settingsPage
     allowedOrientations: Orientation.All
 
-    readonly property int topSafeArea: (typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
+    readonly property int topSafeArea: (typeof Screen !== "undefined" && typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
                                        ? Screen.topCutout
                                        : 0
-    readonly property int bottomSafeArea: (typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
+    readonly property int bottomSafeArea: (typeof Screen !== "undefined" && typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
                                           ? Screen.bottomCutout
                                           : 0
 
-    Settings {
-        id: appSettings
-        category: "HorizonOutlook"
-        property string customRealm: ""
-        property int zoomFactor: 100
-        property bool forceDesktop: false
-        property string startModule: "mail"
-        property bool autoThemeSync: true
-        property bool pinLockEnabled: false
-        property string pinCode: ""
-        property int lockTimeoutMinutes: 5
+    RemorsePopup {
+        id: remorsePopup
     }
 
     SilicaFlickable {
@@ -234,7 +226,7 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Clear Session & Sign Out")
                 onClicked: {
-                    Remorse.popupAction(settingsPage, qsTr("Signing out and clearing session"), function() {
+                    remorsePopup.execute(qsTr("Signing out and clearing session"), function() {
                         if (appWindow.activeWebView) {
                             appWindow.activeWebView.url = "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
                         }

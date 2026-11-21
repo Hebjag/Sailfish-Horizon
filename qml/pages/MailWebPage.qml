@@ -1,4 +1,5 @@
 import QtQuick 2.0
+import QtQuick.Window 2.2
 import Sailfish.Silica 1.0
 import Sailfish.WebView 1.0
 import Sailfish.WebEngine 1.0
@@ -11,29 +12,23 @@ Page {
     focus: true
 
     // Detect modern Jolla 2026 / tall display cutouts & safe areas
-    readonly property int topSafeArea: (typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
+    readonly property int topSafeArea: (typeof Screen !== "undefined" && typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
                                        ? Screen.topCutout
                                        : Theme.paddingSmall
-    readonly property int bottomSafeArea: (typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
+    readonly property int bottomSafeArea: (typeof Screen !== "undefined" && typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
                                           ? Screen.bottomCutout
                                           : 0
 
-    // Offline state
+    // Offline and connectivity state
     property bool isOffline: false
+    property double lastRichNotificationTime: 0
 
-    // Persistent Settings
-    Settings {
-        id: appSettings
-        category: "HorizonOutlook"
-        property string customRealm: ""
-        property int zoomFactor: 100
-        property bool forceDesktop: false
-        property string startModule: "mail"
-        property bool autoThemeSync: true
-
-        onCustomRealmChanged: updateBaseUrls()
-        onForceDesktopChanged: updateMode()
-        onZoomFactorChanged: applyDisplayOptimizations()
+    // React to centralized appSettings updates in real time
+    Connections {
+        target: appSettings
+        onCustomRealmChanged: mailPage.updateBaseUrls()
+        onForceDesktopChanged: mailPage.updateMode()
+        onZoomFactorChanged: mailPage.applyDisplayOptimizations()
     }
 
     // Base endpoints
@@ -80,6 +75,55 @@ Page {
             "  }" +
             "})();"
         webView.runJavaScript(searchScript)
+    }
+
+    // Extracts normalized hostname with any explicit port stripped (e.g. "login.microsoftonline.com:443" -> "login.microsoftonline.com")
+    function extractHost(urlStr) {
+        if (!urlStr || typeof urlStr !== "string") return ""
+        var match = urlStr.match(/^https?:\/\/([^/?#]+)(?:[/?#]|$)/i)
+        if (!match) return ""
+        return match[1].toLowerCase().replace(/:\d+$/, "")
+    }
+
+    // Strict domain validation: Prevents spoofed domains (e.g. 'notoffice.com') and invalid TLD combos (e.g. 'office.net')
+    function isInternalHost(urlStr) {
+        var host = extractHost(urlStr)
+        if (!host) return false
+
+        // Microsoft SafeLinks are destination links and must open in system browser
+        if (host === "safelinks.protection.outlook.com" || host.endsWith(".safelinks.protection.outlook.com")) {
+            return false
+        }
+
+        // Exact official Microsoft 365 allowed domains
+        var allowed = [
+            "office.com",
+            "office365.com",
+            "microsoftonline.com",
+            "onmicrosoft.com",
+            "live.com",
+            "microsoft.com",
+            "msn.com",
+            "msftauth.net",
+            "windows.net"
+        ]
+
+        for (var i = 0; i < allowed.length; i++) {
+            var dom = allowed[i]
+            if (host === dom || host.endsWith("." + dom)) {
+                return true
+            }
+        }
+
+        // Check enterprise custom realm / ADFS federated identity domain if configured
+        if (appSettings.customRealm && appSettings.customRealm.length > 0) {
+            var realm = appSettings.customRealm.toLowerCase().trim()
+            if (host === realm || host.endsWith("." + realm)) {
+                return true
+            }
+        }
+
+        return false
     }
 
     // Display & Zoom injection for Jolla 2026 display + promo banner suppression
@@ -129,61 +173,47 @@ Page {
         webView.runJavaScript(themeScript)
     }
 
-    // External link click interceptor: non-Microsoft links open in system browser
-    function injectExternalLinkInterceptor() {
+    // Network connectivity monitoring for automatic reconnect
+    function injectNetworkMonitor() {
         if (!webView) return
 
-        var linkScript = "(function() {" +
-            "  if (window.__horizon_links_installed) return;" +
-            "  window.__horizon_links_installed = true;" +
-            "  document.addEventListener('click', function(e) {" +
-            "    var target = e.target;" +
-            "    while (target && target.tagName !== 'A') {" +
-            "      target = target.parentElement;" +
+        var netScript = "(function() {" +
+            "  if (window.__horizon_net_monitor) return;" +
+            "  window.__horizon_net_monitor = true;" +
+            "  function reportStatus() {" +
+            "    if (navigator.onLine) {" +
+            "      console.log('[HORIZON_NET_ONLINE]');" +
+            "    } else {" +
+            "      console.log('[HORIZON_NET_OFFLINE]');" +
             "    }" +
-            "    if (target && target.href) {" +
-            "      var h = target.hostname || '';" +
-            "      var href = target.href;" +
-            "      var isMsDomain = h.endsWith('office.com') ||" +
-            "                       h.endsWith('office365.com') ||" +
-            "                       h.endsWith('microsoftonline.com') ||" +
-            "                       h.endsWith('live.com') ||" +
-            "                       h.endsWith('msftauth.net') ||" +
-            "                       h.endsWith('windows.net');" +
-            "      if (!isMsDomain && href.indexOf('http') === 0) {" +
-            "        e.preventDefault();" +
-            "        e.stopPropagation();" +
-            "        console.log('[HORIZON_OPEN_EXTERNAL]' + href);" +
-            "      }" +
-            "    }" +
-            "  }, true);" +
+            "  }" +
+            "  window.addEventListener('online', reportStatus);" +
+            "  window.addEventListener('offline', reportStatus);" +
+            "  if (!navigator.onLine) {" +
+            "    console.log('[HORIZON_NET_OFFLINE]');" +
+            "  }" +
             "})();"
 
-        webView.runJavaScript(linkScript)
+        webView.runJavaScript(netScript)
     }
 
-    // Bridge Web Notification API to native Sailfish DBus notifications & offline detection
-    function injectNotificationAndNetworkBridge() {
+    // Informative Web Notification Bridge (captures sender, subject, body preview)
+    function injectNotificationBridge() {
         if (!webView) return
 
-        var bridgeScript = "(function() {" +
-            "  if (!window.__horizon_net_installed) {" +
-            "    window.__horizon_net_installed = true;" +
-            "    window.addEventListener('offline', function() { console.log('[HORIZON_OFFLINE]'); });" +
-            "    window.addEventListener('online', function() { console.log('[HORIZON_ONLINE]'); });" +
-            "    if (!navigator.onLine) console.log('[HORIZON_OFFLINE]');" +
-            "  }" +
-            "  if (window.__horizon_notif_installed) return;" +
-            "  window.__horizon_notif_installed = true;" +
-            "  var OriginalNotif = window.Notification;" +
+        var notifScript = "(function() {" +
+            "  if (window.__horizon_notif_hooked) return;" +
+            "  window.__horizon_notif_hooked = true;" +
+            "  var OrigNotif = window.Notification;" +
             "  window.Notification = function(title, options) {" +
             "    options = options || {};" +
+            "    var bodyText = options.body || options.summary || '';" +
             "    console.log('[HORIZON_NOTIF]' + JSON.stringify({" +
             "      title: title || 'Outlook 365'," +
-            "      body: options.body || ''" +
+            "      body: bodyText" +
             "    }));" +
-            "    if (OriginalNotif) {" +
-            "      try { return new OriginalNotif(title, options); } catch(e){}" +
+            "    if (OrigNotif) {" +
+            "      try { return new OrigNotif(title, options); } catch(e){}" +
             "    }" +
             "    return { close: function(){} };" +
             "  };" +
@@ -194,7 +224,80 @@ Page {
             "  };" +
             "})();"
 
-        webView.runJavaScript(bridgeScript)
+        webView.runJavaScript(notifScript)
+    }
+
+    // Comprehensive External Link Interceptor:
+    // - Strips explicit ports
+    // - Uses exact domain allowlist (no cross-TLD leakage like office.net)
+    // - Preserves Microsoft SafeLinks intact so Defender scans them in the browser
+    function injectLinkInterceptor() {
+        if (!webView) return
+
+        var realmStr = appSettings.customRealm ? appSettings.customRealm.toLowerCase().trim().replace(/"/g, "") : ""
+
+        var linkScript = "(function() {" +
+            "  if (window.__horizon_links_hooked) return;" +
+            "  window.__horizon_links_hooked = true;" +
+            "  function extractHost(u) {" +
+            "    if (!u || typeof u !== 'string') return '';" +
+            "    var m = u.match(/^https?:\\/\\/([^/?#]+)(?:[/?#]|$)/i);" +
+            "    return m ? m[1].toLowerCase().replace(/:\\d+$/, '') : '';" +
+            "  }" +
+            "  function isInternal(u) {" +
+            "    var h = extractHost(u);" +
+            "    if (!h) return false;" +
+            "    if (h === 'safelinks.protection.outlook.com' || h.endsWith('.safelinks.protection.outlook.com')) {" +
+            "      return false;" +
+            "    }" +
+            "    var allowed = [" +
+            "      'office.com'," +
+            "      'office365.com'," +
+            "      'microsoftonline.com'," +
+            "      'onmicrosoft.com'," +
+            "      'live.com'," +
+            "      'microsoft.com'," +
+            "      'msn.com'," +
+            "      'msftauth.net'," +
+            "      'windows.net'" +
+            "    ];" +
+            "    for (var i = 0; i < allowed.length; i++) {" +
+            "      var dom = allowed[i];" +
+            "      if (h === dom || h.endsWith('.' + dom)) {" +
+            "        return true;" +
+            "      }" +
+            "    }" +
+            "    var realm = '" + realmStr + "';" +
+            "    if (realm.length > 0 && (h === realm || h.endsWith('.' + realm))) {" +
+            "      return true;" +
+            "    }" +
+            "    return false;" +
+            "  }" +
+            "  document.addEventListener('click', function(e) {" +
+            "    var t = e.target;" +
+            "    while (t && t.tagName !== 'A') t = t.parentElement;" +
+            "    if (t && t.href) {" +
+            "      var targetUrl = t.href;" +
+            "      if (!isInternal(targetUrl) && /^https?:\\/\\//i.test(targetUrl)) {" +
+            "        e.preventDefault();" +
+            "        e.stopPropagation();" +
+            "        console.log('[HORIZON_OPEN_EXT]' + targetUrl);" +
+            "      }" +
+            "    }" +
+            "  }, true);" +
+            "  var origOpen = window.open;" +
+            "  window.open = function(url) {" +
+            "    if (url && typeof url === 'string') {" +
+            "      if (!isInternal(url) && /^https?:\\/\\//i.test(url)) {" +
+            "        console.log('[HORIZON_OPEN_EXT]' + url);" +
+            "        return null;" +
+            "      }" +
+            "    }" +
+            "    return origOpen ? origOpen.apply(this, arguments) : null;" +
+            "  };" +
+            "})();"
+
+        webView.runJavaScript(linkScript)
     }
 
     // Hardware Keyboard Shortcuts
@@ -227,9 +330,30 @@ Page {
         onColorSchemeChanged: mailPage.applyAmbianceTheme()
     }
 
+    // Periodic automatic reconnection retry when offline
+    Timer {
+        id: reconnectTimer
+        interval: 10000
+        repeat: true
+        running: mailPage.isOffline
+        onTriggered: {
+            if (mailPage.isOffline) {
+                var currentUrl = webView.url.toString()
+                if (currentUrl.indexOf("about:") === 0 || currentUrl.length === 0) {
+                    mailPage.navigateToModule(mailPage.activeModule)
+                } else {
+                    webView.reload()
+                }
+            }
+        }
+    }
+
     Component.onCompleted: {
         updateBaseUrls()
         appWindow.activeWebView = webView
+
+        WebEngineSettings.javascriptEnabled = true
+        WebEngineSettings.autoLoadImages = true
 
         if (typeof initialMailtoUrl !== "undefined" && initialMailtoUrl.length > 0) {
             webView.url = initialMailtoUrl
@@ -244,6 +368,7 @@ Page {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: bottomToolbar.top
+        contentHeight: height
 
         PullDownMenu {
             MenuItem {
@@ -258,7 +383,14 @@ Page {
             }
             MenuItem {
                 text: qsTr("Reload")
-                onClicked: webView.reload()
+                onClicked: {
+                    var cur = webView.url.toString()
+                    if (cur.indexOf("about:") === 0) {
+                        mailPage.navigateToModule(mailPage.activeModule)
+                    } else {
+                        webView.reload()
+                    }
+                }
             }
             MenuItem {
                 text: appSettings.forceDesktop ? qsTr("Switch to Mobile View") : qsTr("Switch to Desktop View")
@@ -323,15 +455,7 @@ Page {
             active: true
             httpUserAgent: appSettings.forceDesktop ? mailPage.desktopUserAgent : mailPage.mobileUserAgent
 
-            WebEngineSettings {
-                javascriptEnabled: true
-                autoLoadImages: true
-                localStorageEnabled: true
-                offlineStorageDatabaseEnabled: true
-                offlineWebApplicationCacheEnabled: true
-            }
-
-            // Intercept console messages for DBus notifications, offline state, and external links
+            // Handle console messages from injected scripts
             onConsoleMessage: {
                 if (message.indexOf("[HORIZON_NOTIF]") === 0) {
                     try {
@@ -339,20 +463,36 @@ Page {
                         var payload = JSON.parse(jsonStr)
                         if (typeof notificationManager !== "undefined" && notificationManager) {
                             notificationManager.sendNotification(payload.title, payload.body, "email")
+                            mailPage.lastRichNotificationTime = Date.now()
                         }
                     } catch (err) {
                         console.warn("Notification parse error:", err)
                     }
-                } else if (message.indexOf("[HORIZON_OPEN_EXTERNAL]") === 0) {
-                    var externalUrl = message.substring(23)
+                } else if (message.indexOf("[HORIZON_OPEN_EXT]") === 0) {
+                    var externalUrl = message.substring(18)
                     Qt.openUrlExternally(externalUrl)
-                } else if (message === "[HORIZON_OFFLINE]") {
+                } else if (message === "[HORIZON_NET_OFFLINE]") {
                     mailPage.isOffline = true
-                } else if (message === "[HORIZON_ONLINE]") {
+                } else if (message === "[HORIZON_NET_ONLINE]") {
                     if (mailPage.isOffline) {
                         mailPage.isOffline = false
-                        webView.reload()
+                        var currentU = webView.url.toString()
+                        if (currentU.indexOf("about:") === 0) {
+                            mailPage.navigateToModule(mailPage.activeModule)
+                        } else {
+                            webView.reload()
+                        }
                     }
+                }
+            }
+
+            // Fallback native link-click signal handler
+            onLinkClicked: {
+                var urlStr = url.toString()
+                if (!mailPage.isInternalHost(urlStr) && (urlStr.indexOf("http://") === 0 || urlStr.indexOf("https://") === 0)) {
+                    Qt.openUrlExternally(urlStr)
+                } else {
+                    webView.url = url
                 }
             }
 
@@ -372,10 +512,30 @@ Page {
             onLoadingChanged: {
                 appWindow.isPageLoading = webView.loading
                 if (!webView.loading) {
+                    var urlStr = webView.url.toString()
+                    var isNetError = urlStr.indexOf("about:neterror") !== -1 ||
+                                     urlStr.indexOf("about:certerror") !== -1 ||
+                                     webView.title.indexOf("Server not found") !== -1 ||
+                                     webView.title.indexOf("Problem loading page") !== -1
+
+                    if (isNetError || (webView.loadProgress === 0 && urlStr.indexOf("about:") !== 0)) {
+                        mailPage.isOffline = true
+                    } else if (urlStr.indexOf("http") === 0 && webView.loadProgress === 100) {
+                        mailPage.isOffline = false
+                    }
+
                     mailPage.applyDisplayOptimizations()
                     mailPage.applyAmbianceTheme()
-                    mailPage.injectNotificationAndNetworkBridge()
-                    mailPage.injectExternalLinkInterceptor()
+                    mailPage.injectNetworkMonitor()
+                    mailPage.injectNotificationBridge()
+                    mailPage.injectLinkInterceptor()
+                }
+            }
+
+            onLoadProgressChanged: {
+                var cur = webView.url.toString()
+                if (webView.loadProgress > 20 && cur.indexOf("http") === 0 && mailPage.isOffline) {
+                    mailPage.isOffline = false
                 }
             }
 
@@ -383,9 +543,24 @@ Page {
                 if (webView.title.length > 0) {
                     appWindow.currentTitle = webView.title
 
+                    if (webView.title.indexOf("Server not found") !== -1 || webView.title.indexOf("Problem loading page") !== -1) {
+                        mailPage.isOffline = true
+                    }
+
                     var match = webView.title.match(/\((\d+)\)/)
                     if (match && match[1]) {
-                        appWindow.unreadCount = parseInt(match[1])
+                        var count = parseInt(match[1])
+                        // Only trigger title-based fallback notification if no rich HTML5 notification arrived in the last 3 seconds
+                        if (count > appWindow.unreadCount && (Date.now() - mailPage.lastRichNotificationTime > 3000)) {
+                            if (typeof notificationManager !== "undefined" && notificationManager) {
+                                notificationManager.sendNotification(
+                                    qsTr("Outlook 365"),
+                                    qsTr("You have %1 unread email(s)").arg(count),
+                                    "email"
+                                )
+                            }
+                        }
+                        appWindow.unreadCount = count
                     } else if (webView.title.indexOf("(") === -1) {
                         appWindow.unreadCount = 0
                     }
@@ -393,7 +568,7 @@ Page {
             }
 
             ViewPlaceholder {
-                enabled: webView.loadProgress === 0 && !webView.loading && mailPage.isOffline
+                enabled: mailPage.isOffline
                 text: qsTr("No Internet Connection")
                 hintText: qsTr("The app will automatically reload when your connection resumes")
             }
