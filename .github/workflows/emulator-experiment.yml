@@ -97,12 +97,12 @@ jobs:
             set +e
             ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
               defaultuser@127.0.0.1 \
-              "XDG_RUNTIME_DIR=/run/user/\$(id -u) WAYLAND_DISPLAY='$wayland_socket' QT_FORCE_STDERR_LOGGING=1 timeout 30s /usr/bin/harbour-sailfish-horizon" \
+              "XDG_RUNTIME_DIR=/run/user/\$(id -u) WAYLAND_DISPLAY='$wayland_socket' QT_FORCE_STDERR_LOGGING=1 EMBED_CONSOLE=1 timeout 90s /usr/bin/harbour-sailfish-horizon" \
               2>&1 | tee diagnostics/startup.log
             exit "${PIPESTATUS[0]}"
           ) &
           app_pid=$!
-          sleep 15
+          sleep 75
           VBoxManage controlvm "$SAILFISH_VM" screenshotpng diagnostics/screen.png
           set +e
           wait "$app_pid"
@@ -114,7 +114,7 @@ jobs:
             > diagnostics/journal.log
           cat diagnostics/journal.log
           if [ "$app_status" -ne 124 ]; then
-            echo "Application exited before the 30-second timeout (status $app_status)." >&2
+            echo "Application exited before the 90-second timeout (status $app_status)." >&2
             exit 1
           fi
           if grep -Ei '(^|[[:space:]])(error|fatal):|type .* unavailable|cannot assign to non-existent|module .* is not installed' diagnostics/startup.log diagnostics/journal.log; then
