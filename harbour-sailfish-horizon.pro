@@ -2,6 +2,8 @@ TARGET = harbour-sailfish-horizon
 
 CONFIG += sailfishapp
 
+PKGCONFIG += qt5embedwidget
+
 QT += dbus
 
 HEADERS += src/notificationmanager.h
