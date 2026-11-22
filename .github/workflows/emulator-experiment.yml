@@ -91,7 +91,8 @@ jobs:
           fi
           wayland_socket="${wayland_sockets[0]}"
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
-            defaultuser@127.0.0.1 'mcetool --set-tklock-mode=unlocked'
+            root@127.0.0.1 \
+            'if [ ! -x /usr/sbin/mcetool ]; then pkcon --noninteractive install mce-tools || exit; fi; /usr/sbin/mcetool --set-tklock-mode=unlocked'
           (
             set +e
             ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
