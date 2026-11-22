@@ -81,11 +81,22 @@ jobs:
             "${rpms[0]}" defaultuser@127.0.0.1:/tmp/horizon.i486.rpm
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
             root@127.0.0.1 'pkcon --noninteractive --allow-untrusted install-local /tmp/horizon.i486.rpm'
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            root@127.0.0.1 'find /run /tmp -type s -iname "*wayland*" -print' \
+            | tee diagnostics/wayland-sockets.log
+          mapfile -t wayland_sockets < diagnostics/wayland-sockets.log
+          if [ "${#wayland_sockets[@]}" -ne 1 ]; then
+            echo "Expected exactly one Wayland socket, found ${#wayland_sockets[@]}." >&2
+            exit 1
+          fi
+          wayland_socket="${wayland_sockets[0]}"
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            defaultuser@127.0.0.1 'mcetool --set-tklock-mode=unlocked'
           (
             set +e
             ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
               defaultuser@127.0.0.1 \
-              'set -x; id; ls -la /run/user/$(id -u); command -v timeout; ls -l /usr/bin/harbour-sailfish-horizon; XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 QT_FORCE_STDERR_LOGGING=1 timeout 30s /usr/bin/harbour-sailfish-horizon; status=$?; echo "Application command status: $status"; exit "$status"' \
+              "XDG_RUNTIME_DIR=/run/user/\$(id -u) WAYLAND_DISPLAY='$wayland_socket' QT_FORCE_STDERR_LOGGING=1 timeout 30s /usr/bin/harbour-sailfish-horizon" \
               2>&1 | tee diagnostics/startup.log
             exit "${PIPESTATUS[0]}"
           ) &
@@ -105,8 +116,8 @@ jobs:
             echo "Application exited before the 30-second timeout (status $app_status)." >&2
             exit 1
           fi
-          if grep -Ei '(^|[[:space:]])(error|fatal):|type .* unavailable|cannot assign to non-existent|module .* is not installed' diagnostics/startup.log; then
-            echo "Startup errors found; see startup.log." >&2
+          if grep -Ei '(^|[[:space:]])(error|fatal):|type .* unavailable|cannot assign to non-existent|module .* is not installed' diagnostics/startup.log diagnostics/journal.log; then
+            echo "Startup errors found; see diagnostics." >&2
             exit 1
           fi
           echo "No startup error detected; this does not verify the rendered page."
