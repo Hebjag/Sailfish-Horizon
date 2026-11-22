@@ -85,7 +85,7 @@ jobs:
             set +e
             ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
               defaultuser@127.0.0.1 \
-              'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 QT_FORCE_STDERR_LOGGING=1 timeout 30s /usr/bin/harbour-sailfish-horizon' \
+              'set -x; id; ls -la /run/user/$(id -u); command -v timeout; ls -l /usr/bin/harbour-sailfish-horizon; XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 QT_FORCE_STDERR_LOGGING=1 timeout 30s /usr/bin/harbour-sailfish-horizon; status=$?; echo "Application command status: $status"; exit "$status"' \
               2>&1 | tee diagnostics/startup.log
             exit "${PIPESTATUS[0]}"
           ) &
@@ -97,9 +97,10 @@ jobs:
           app_status=$?
           set -e
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
-            defaultuser@127.0.0.1 \
-            'XDG_RUNTIME_DIR=/run/user/$(id -u) journalctl --user -n 100 --no-pager' \
+            root@127.0.0.1 \
+            'journalctl -b --no-pager _EXE=/usr/bin/harbour-sailfish-horizon' \
             > diagnostics/journal.log
+          cat diagnostics/journal.log
           if [ "$app_status" -ne 124 ]; then
             echo "Application exited before the 30-second timeout (status $app_status)." >&2
             exit 1
