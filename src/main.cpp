@@ -8,6 +8,7 @@
 #include <QUrlQuery>
 #include <QDir>
 #include "notificationmanager.h"
+#include "webinput.h"
 
 int main(int argc, char *argv[])
 {
@@ -46,6 +47,8 @@ int main(int argc, char *argv[])
     // Register DBus NotificationManager
     NotificationManager *notifMgr = new NotificationManager(app.data());
     view->rootContext()->setContextProperty(QStringLiteral("notificationManager"), notifMgr);
+    WebInput *webInput = new WebInput(app.data());
+    view->rootContext()->setContextProperty(QStringLiteral("webInput"), webInput);
     view->rootContext()->setContextProperty(QStringLiteral("initialMailtoUrl"), mailtoDeeplink);
     view->rootContext()->setContextProperty(QStringLiteral("isBackgroundDaemon"), backgroundMode);
 

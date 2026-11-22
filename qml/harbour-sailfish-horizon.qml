@@ -14,6 +14,9 @@ ApplicationWindow {
     property bool isPageLoading: false
     property int unreadCount: 0
     property var activeWebView: null
+    readonly property int cutoutInset: typeof Screen.topCutout !== "undefined"
+                                       ? Math.max(0, Screen.topCutout.y + Screen.topCutout.height)
+                                       : 0
 
     // Passcode Lock State
     property bool isLocked: false

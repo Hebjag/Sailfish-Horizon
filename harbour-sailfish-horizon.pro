@@ -6,10 +6,12 @@ PKGCONFIG += qt5embedwidget
 
 QT += dbus
 
-HEADERS += src/notificationmanager.h
+HEADERS += src/notificationmanager.h \
+    src/webinput.h
 
 SOURCES += src/main.cpp \
-    src/notificationmanager.cpp
+    src/notificationmanager.cpp \
+    src/webinput.cpp
 
 OTHER_FILES += qml/harbour-sailfish-horizon.qml \
     qml/pages/*.qml \

@@ -11,13 +11,12 @@ Page {
     allowedOrientations: Orientation.All
     focus: true
 
-    // Detect modern Jolla 2026 / tall display cutouts & safe areas
-    readonly property int topSafeArea: (typeof Screen !== "undefined" && typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
-                                       ? Screen.topCutout
+    readonly property int topSafeArea: orientation === Orientation.Portrait
+                                       ? Math.max(Theme.paddingSmall, appWindow.cutoutInset)
                                        : Theme.paddingSmall
-    readonly property int bottomSafeArea: (typeof Screen !== "undefined" && typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
-                                          ? Screen.bottomCutout
-                                          : 0
+    readonly property int bottomSafeArea: orientation === Orientation.PortraitInverted ? appWindow.cutoutInset : 0
+    readonly property int leftSafeArea: orientation === Orientation.Landscape ? appWindow.cutoutInset : 0
+    readonly property int rightSafeArea: orientation === Orientation.LandscapeInverted ? appWindow.cutoutInset : 0
 
     // Offline and connectivity state
     property bool isOffline: false
@@ -65,16 +64,7 @@ Page {
     }
 
     function focusSearch() {
-        var searchScript = "(function() {" +
-            "  var input = document.querySelector('input[aria-label*=\"Search\"], input[placeholder*=\"Search\"], input[type=\"search\"], #topSearchInput');" +
-            "  if (input) {" +
-            "    input.focus(); input.click();" +
-            "  } else {" +
-            "    var btn = document.querySelector('[data-icon-name=\"Search\"], [aria-label*=\"Search\"]');" +
-            "    if (btn) btn.click();" +
-            "  }" +
-            "})();"
-        webView.runJavaScript(searchScript)
+        webInput.focusSearch(webView)
     }
 
     // Extracts normalized hostname with any explicit port stripped (e.g. "login.microsoftonline.com:443" -> "login.microsoftonline.com")
@@ -370,7 +360,9 @@ Page {
         anchors.top: parent.top
         anchors.topMargin: mailPage.topSafeArea
         anchors.left: parent.left
+        anchors.leftMargin: mailPage.leftSafeArea
         anchors.right: parent.right
+        anchors.rightMargin: mailPage.rightSafeArea
         anchors.bottom: bottomToolbar.top
         contentHeight: height
 
@@ -588,7 +580,9 @@ Page {
         id: bottomToolbar
         anchors.bottom: parent.bottom
         anchors.left: parent.left
+        anchors.leftMargin: mailPage.leftSafeArea
         anchors.right: parent.right
+        anchors.rightMargin: mailPage.rightSafeArea
         height: Theme.itemSizeSmall + mailPage.bottomSafeArea
         color: Theme.rgba(Theme.highlightBackgroundColor, 0.15)
 

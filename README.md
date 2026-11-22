@@ -46,7 +46,7 @@ security policy. Download notifications require a supported download signal.
    - ✉️ **Mail**: Instant access to your Outlook inbox.
    - 📅 **Calendar**: Meetings, agendas, and appointments.
    - 👥 **People / Contacts**: Corporate address book and lookup.
-   - 🔍 **Search**: Instantly focuses Outlook's internal search bar.
+   - 🔍 **Search**: Focuses Outlook's search bar using its Alt+Q shortcut. Outlook keyboard shortcuts must be enabled.
 
 10. **Attachment Download Notifications**:
     - System DBus notification alerts you when attachments are downloaded to `~/Downloads`.

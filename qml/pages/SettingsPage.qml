@@ -7,12 +7,10 @@ Page {
     id: settingsPage
     allowedOrientations: Orientation.All
 
-    readonly property int topSafeArea: (typeof Screen !== "undefined" && typeof Screen.topCutout !== "undefined" && Screen.topCutout > 0)
-                                       ? Screen.topCutout
-                                       : 0
-    readonly property int bottomSafeArea: (typeof Screen !== "undefined" && typeof Screen.bottomCutout !== "undefined" && Screen.bottomCutout > 0)
-                                          ? Screen.bottomCutout
-                                          : 0
+    readonly property int topSafeArea: orientation === Orientation.Portrait ? appWindow.cutoutInset : 0
+    readonly property int bottomSafeArea: orientation === Orientation.PortraitInverted ? appWindow.cutoutInset : 0
+    readonly property int leftSafeArea: orientation === Orientation.Landscape ? appWindow.cutoutInset : 0
+    readonly property int rightSafeArea: orientation === Orientation.LandscapeInverted ? appWindow.cutoutInset : 0
 
     RemorsePopup {
         id: remorsePopup
@@ -22,6 +20,8 @@ Page {
         anchors.fill: parent
         anchors.topMargin: settingsPage.topSafeArea
         anchors.bottomMargin: settingsPage.bottomSafeArea
+        anchors.leftMargin: settingsPage.leftSafeArea
+        anchors.rightMargin: settingsPage.rightSafeArea
         contentHeight: column.height + Theme.paddingLarge
 
         Column {

@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-shortcut-test'">
+    <title>Search shortcut test</title>
+</head>
+<body>
+    <input id="search" aria-label="Search">
+    <script nonce="shortcut-test">
+        document.addEventListener("keydown", function (event) {
+            if (event.altKey && event.key.toLowerCase() === "q") {
+                var search = document.getElementById("search")
+                search.focus()
+                document.title = document.activeElement === search
+                    ? "SEARCH_SHORTCUT_PASS" : "SEARCH_SHORTCUT_FAIL"
+            }
+        })
+    </script>
+</body>
+</html>

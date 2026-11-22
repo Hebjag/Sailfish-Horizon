@@ -111,6 +111,35 @@ jobs:
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
             root@127.0.0.1 \
             'if [ ! -x /usr/sbin/mcetool ]; then pkcon --noninteractive install mce-tools || exit; fi; /usr/sbin/mcetool --set-tklock-mode=unlocked'
+          scp -P 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            tests/search-shortcut.html defaultuser@127.0.0.1:/tmp/search-shortcut.html
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new root@127.0.0.1 '
+            set -e
+            page=/usr/share/harbour-sailfish-horizon/qml/pages/MailWebPage.qml
+            cp "$page" /tmp/MailWebPage.original.qml
+            sed -i "/    id: mailPage/a\\    Timer { interval: 25000; running: true; onTriggered: mailPage.focusSearch() }" "$page"
+            sed -i "s|navigateToModule(appSettings.startModule)|webView.url = \"file:///tmp/search-shortcut.html\"|" "$page"
+            sed -i "/            onTitleChanged: {/a\\                console.log(\"SEARCH_FIXTURE_TITLE: \" + webView.title)" "$page"
+          '
+          set +e
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            defaultuser@127.0.0.1 \
+            "XDG_RUNTIME_DIR=/run/user/\$(id -u) WAYLAND_DISPLAY='$wayland_socket' timeout 45s /usr/bin/harbour-sailfish-horizon" \
+            > diagnostics/search-startup.log 2>&1
+          search_status=$?
+          set -e
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            root@127.0.0.1 \
+            'cp /tmp/MailWebPage.original.qml /usr/share/harbour-sailfish-horizon/qml/pages/MailWebPage.qml'
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            root@127.0.0.1 \
+            'journalctl -b --no-pager _EXE=/usr/bin/harbour-sailfish-horizon' \
+            > diagnostics/search-journal.log
+          if [ "$search_status" -ne 124 ] || ! grep -F 'SEARCH_FIXTURE_TITLE: SEARCH_SHORTCUT_PASS' diagnostics/search-journal.log; then
+            cat diagnostics/search-startup.log diagnostics/search-journal.log
+            echo "Search shortcut fixture failed (status $search_status)." >&2
+            exit 1
+          fi
           (
             set +e
             ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
