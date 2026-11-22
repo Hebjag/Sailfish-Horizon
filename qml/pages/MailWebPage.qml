@@ -175,7 +175,7 @@ Page {
 
     // Network connectivity monitoring for automatic reconnect
     function injectNetworkMonitor() {
-        if (!webView) return
+        if (!webView || typeof webView.consoleMessage !== "function") return
 
         var netScript = "(function() {" +
             "  if (window.__horizon_net_monitor) return;" +
@@ -199,7 +199,7 @@ Page {
 
     // Informative Web Notification Bridge (captures sender, subject, body preview)
     function injectNotificationBridge() {
-        if (!webView) return
+        if (!webView || typeof webView.consoleMessage !== "function") return
 
         var notifScript = "(function() {" +
             "  if (window.__horizon_notif_hooked) return;" +
@@ -232,7 +232,7 @@ Page {
     // - Uses exact domain allowlist (no cross-TLD leakage like office.net)
     // - Preserves Microsoft SafeLinks intact so Defender scans them in the browser
     function injectLinkInterceptor() {
-        if (!webView) return
+        if (!webView || typeof webView.consoleMessage !== "function") return
 
         var realmStr = appSettings.customRealm ? appSettings.customRealm.toLowerCase().trim().replace(/"/g, "") : ""
 
@@ -352,6 +352,10 @@ Page {
         updateBaseUrls()
         appWindow.activeWebView = webView
 
+        if (typeof webView.consoleMessage !== "function") {
+            console.warn("WebView console messages are unavailable; rich notifications and injected link interception are disabled")
+        }
+
         WebEngineSettings.javascriptEnabled = true
         WebEngineSettings.autoLoadImages = true
 
@@ -453,36 +457,53 @@ Page {
             id: webView
             anchors.fill: parent
             active: true
+            downloadsEnabled: true
             httpUserAgent: appSettings.forceDesktop ? mailPage.desktopUserAgent : mailPage.mobileUserAgent
 
-            // Handle console messages from injected scripts
-            onConsoleMessage: {
-                if (message.indexOf("[HORIZON_NOTIF]") === 0) {
-                    try {
-                        var jsonStr = message.substring(15)
-                        var payload = JSON.parse(jsonStr)
-                        if (typeof notificationManager !== "undefined" && notificationManager) {
-                            notificationManager.sendNotification(payload.title, payload.body, "email")
-                            mailPage.lastRichNotificationTime = Date.now()
+            Connections {
+                target: webView
+                ignoreUnknownSignals: true
+
+                onConsoleMessage: {
+                    if (message.indexOf("[HORIZON_NOTIF]") === 0) {
+                        try {
+                            var jsonStr = message.substring(15)
+                            var payload = JSON.parse(jsonStr)
+                            if (typeof notificationManager !== "undefined" && notificationManager) {
+                                notificationManager.sendNotification(payload.title, payload.body, "email")
+                                mailPage.lastRichNotificationTime = Date.now()
+                            }
+                        } catch (err) {
+                            console.warn("Notification parse error:", err)
                         }
-                    } catch (err) {
-                        console.warn("Notification parse error:", err)
-                    }
-                } else if (message.indexOf("[HORIZON_OPEN_EXT]") === 0) {
-                    var externalUrl = message.substring(18)
-                    Qt.openUrlExternally(externalUrl)
-                } else if (message === "[HORIZON_NET_OFFLINE]") {
-                    mailPage.isOffline = true
-                } else if (message === "[HORIZON_NET_ONLINE]") {
-                    if (mailPage.isOffline) {
-                        mailPage.isOffline = false
-                        var currentU = webView.url.toString()
-                        if (currentU.indexOf("about:") === 0) {
-                            mailPage.navigateToModule(mailPage.activeModule)
-                        } else {
-                            webView.reload()
+                    } else if (message.indexOf("[HORIZON_OPEN_EXT]") === 0) {
+                        var externalUrl = message.substring(18)
+                        Qt.openUrlExternally(externalUrl)
+                    } else if (message === "[HORIZON_NET_OFFLINE]") {
+                        mailPage.isOffline = true
+                    } else if (message === "[HORIZON_NET_ONLINE]") {
+                        if (mailPage.isOffline) {
+                            mailPage.isOffline = false
+                            var currentU = webView.url.toString()
+                            if (currentU.indexOf("about:") === 0) {
+                                mailPage.navigateToModule(mailPage.activeModule)
+                            } else {
+                                webView.reload()
+                            }
                         }
                     }
+                }
+
+                onDownloadRequested: {
+                    if (typeof notificationManager !== "undefined" && notificationManager) {
+                        var filename = download.suggestedFilename || qsTr("attachment")
+                        notificationManager.sendNotification(
+                            qsTr("Downloading Attachment"),
+                            qsTr("Saving %1 to ~/Downloads").arg(filename),
+                            "email"
+                        )
+                    }
+                    download.accept()
                 }
             }
 
@@ -494,19 +515,6 @@ Page {
                 } else {
                     webView.url = url
                 }
-            }
-
-            // Attachment download handling
-            onDownloadRequested: {
-                if (typeof notificationManager !== "undefined" && notificationManager) {
-                    var filename = download.suggestedFilename || qsTr("attachment")
-                    notificationManager.sendNotification(
-                        qsTr("Downloading Attachment"),
-                        qsTr("Saving %1 to ~/Downloads").arg(filename),
-                        "email"
-                    )
-                }
-                download.accept()
             }
 
             onLoadingChanged: {
