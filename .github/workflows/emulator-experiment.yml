@@ -72,7 +72,7 @@ jobs:
           scp -P 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
             "${rpms[0]}" defaultuser@127.0.0.1:/tmp/horizon.i486.rpm
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
-            root@127.0.0.1 'rpm -U /tmp/horizon.i486.rpm'
+            root@127.0.0.1 'pkcon --noninteractive --allow-untrusted install-local /tmp/horizon.i486.rpm'
           (
             set +e
             "$HOME/SailfishOS/bin/sfdk" emulator exec \
