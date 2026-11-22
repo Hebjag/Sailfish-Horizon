@@ -6,6 +6,13 @@ A dedicated, isolated Sailfish OS web application container for enterprise **Mic
 
 ## Complete Feature Matrix
 
+Some features depend on WebView APIs or page scripts that may not be available.
+On Sailfish WebView versions without a console-message signal, rich web
+notifications, injected external-link interception, and injected network monitoring
+are disabled. Native link handling and title-based notifications remain available.
+Websites may also block injected display and theme scripts through their content
+security policy. Download notifications require a supported download signal.
+
 1. **Complete Isolation from Main Browser**:
    - Runs in its own separate process and application sandbox (`harbour-sailfish-horizon`).
    - Dedicated cookie storage, session state, localStorage, and IndexedDB at `~/.local/share/harbour-sailfish-horizon/` and `~/.cache/harbour-sailfish-horizon/`.
