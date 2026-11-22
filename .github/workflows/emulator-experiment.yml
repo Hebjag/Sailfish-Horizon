@@ -47,7 +47,16 @@ jobs:
 
       - name: Start emulator
         run: |
-          "$HOME/SailfishOS/bin/sfdk" emulator start --headless
+          mapfile -t vms < <(VBoxManage list vms | sed -n 's/^"\(SailfishOS-[^"]*\)".*/\1/p')
+          if [ "${#vms[@]}" -ne 1 ]; then
+            echo "Expected exactly one Sailfish emulator, found ${#vms[@]}" >&2
+            exit 1
+          fi
+          echo "SAILFISH_VM=${vms[0]}" >> "$GITHUB_ENV"
+          if ! VBoxManage startvm "${vms[0]}" --type headless; then
+            VBoxManage showvminfo "${vms[0]}" --log 0 | tail -100
+            exit 1
+          fi
           "$HOME/SailfishOS/bin/sfdk" emulator exec true
 
       - name: Install and launch the app
@@ -64,11 +73,19 @@ jobs:
             "${rpms[0]}" defaultuser@127.0.0.1:/tmp/horizon.i486.rpm
           ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
             root@127.0.0.1 'zypper --non-interactive install /tmp/horizon.i486.rpm'
+          (
+            set +e
+            "$HOME/SailfishOS/bin/sfdk" emulator exec \
+              'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 timeout 30s harbour-sailfish-horizon' \
+              2>&1 | tee diagnostics/startup.log
+            exit "${PIPESTATUS[0]}"
+          ) &
+          app_pid=$!
+          sleep 15
+          VBoxManage controlvm "$SAILFISH_VM" screenshotpng diagnostics/screen.png
           set +e
-          "$HOME/SailfishOS/bin/sfdk" emulator exec \
-            'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 timeout 30s harbour-sailfish-horizon' \
-            2>&1 | tee diagnostics/startup.log
-          app_status=${PIPESTATUS[0]}
+          wait "$app_pid"
+          app_status=$?
           set -e
           if [ "$app_status" -ne 124 ]; then
             echo "Application exited before the 30-second timeout (status $app_status)." >&2
