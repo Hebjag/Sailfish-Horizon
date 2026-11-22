@@ -75,7 +75,7 @@ jobs:
             root@127.0.0.1 'pkcon --noninteractive --allow-untrusted install-local /tmp/horizon.i486.rpm'
           (
             set +e
-            "$HOME/SailfishOS/bin/sfdk" emulator exec \
+            "$HOME/SailfishOS/bin/sfdk" emulator exec bash -c \
               'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 timeout 30s harbour-sailfish-horizon' \
               2>&1 | tee diagnostics/startup.log
             exit "${PIPESTATUS[0]}"
