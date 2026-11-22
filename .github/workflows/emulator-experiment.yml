@@ -1,0 +1,84 @@
+name: Sailfish emulator experiment
+
+on:
+  push:
+    branches: [ "copilot/sailfish-emulator-test" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build i486 RPM
+        uses: coderus/github-sfos-build@master
+        with:
+          release: "4.5.0.16"
+          arch: i486
+
+      - name: Install VirtualBox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y virtualbox "linux-headers-$(uname -r)"
+          sudo modprobe vboxdrv
+          VBoxManage --version
+          test -e /dev/vboxdrv
+
+      - name: Install Sailfish SDK and emulator
+        run: |
+          curl --fail --location --retry 3 \
+            https://releases.sailfishos.org/sdk/installers/3.13.5/SailfishSDK-3.13.5-linux64-offline.run \
+            --output /tmp/sailfish-sdk-installer
+          chmod +x /tmp/sailfish-sdk-installer
+          QT_QPA_PLATFORM=minimal /tmp/sailfish-sdk-installer \
+            non-interactive=1 accept-licenses=1 build-engine-type=vbox
+          "$HOME/SailfishOS/bin/sfdk" emulator --help
+          VBoxManage list vms
+
+      - name: Start emulator
+        run: |
+          "$HOME/SailfishOS/bin/sfdk" emulator start --headless
+          "$HOME/SailfishOS/bin/sfdk" emulator exec true
+
+      - name: Install and launch the app
+        run: |
+          set -o pipefail
+          mkdir -p diagnostics
+          mapfile -t rpms < <(find RPMS -type f -name '*i486.rpm' ! -name '*debug*.rpm')
+          if [ "${#rpms[@]}" -ne 1 ]; then
+            echo "Expected exactly one i486 RPM, found ${#rpms[@]}" >&2
+            exit 1
+          fi
+          key="$HOME/SailfishOS/vmshare/ssh/private_keys/sdk"
+          scp -P 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            "${rpms[0]}" defaultuser@127.0.0.1:/tmp/horizon.i486.rpm
+          ssh -p 2223 -i "$key" -o StrictHostKeyChecking=accept-new \
+            root@127.0.0.1 'zypper --non-interactive install /tmp/horizon.i486.rpm'
+          set +e
+          "$HOME/SailfishOS/bin/sfdk" emulator exec \
+            'XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 timeout 30s harbour-sailfish-horizon' \
+            2>&1 | tee diagnostics/startup.log
+          app_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$app_status" -ne 124 ]; then
+            echo "Application exited before the 30-second timeout (status $app_status)." >&2
+            exit 1
+          fi
+          if grep -Ei '(^|[[:space:]])(error|fatal):|type .* unavailable|cannot assign to non-existent|module .* is not installed' diagnostics/startup.log; then
+            echo "Startup errors found; see startup.log." >&2
+            exit 1
+          fi
+          echo "No startup error detected; this does not verify the rendered page."
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sailfish-emulator-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
